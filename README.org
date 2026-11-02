@@ -1,0 +1,90 @@
+#+title: swh.el
+#+options: toc:nil num:nil
+
+Emacs client for [[https://www.softwareheritage.org][Software Heritage]] (SWH): archive your code, cite it
+with a [[https://www.swhid.org][SWHID]], see where the files are already archived.
+
+* Commands
+
+- =swh-status= :: is the repo archived?
+- =swh-visits= :: when was it last visited by SWH?
+- =swh-save-code-now= :: save your repository now to SWH
+- =swh-add-forge-now= :: open the "Add forge now" form
+- =swh-swhid= :: copy the SWHID of the current file/region, or of the
+  file/directory at point in Dired
+- =swh-cite= :: show a BibTeX entry citing the code
+- =swh-scan= :: show the repository's tracked files as a tree
+- =swh-provenance= :: tell where the archive found the file's content,
+  or the file or directory at point in Dired
+- =swh-mode= :: show in mode line if the file/directory is archived
+
+With =C-u=, or where there is no public origin, =swh-status=, =swh-visits=,
+=swh-save-code-now= and =swh-cite= ask for the URL of a public repository
+instead.
+
+* Install
+
+Requires Emacs 30.1 or later and =git=.
+
+#+begin_src emacs-lisp
+(add-to-list 'load-path "/path/to/swh.el")
+(require 'swh)
+#+end_src
+
+To copy a SWHID with =C-c s=:
+
+#+begin_src emacs-lisp
+(keymap-global-set "C-c s" #'swh-swhid)
+#+end_src
+
+Without a token, the archive allows 120 requests per hour.
+
+With a token [[https://archive.softwareheritage.org/api/#authentication][from your archive account]], 1200 requests per hour.
+
+Set the environment variable =SWH_API_TOKEN= (which swhd reads too), or
+add a line in =~/.authinfo.gpg=:
+
+: machine archive.softwareheritage.org password <token>
+
+Optionally, you can also run the local [[https://github.com/bzg/swhd][swhd]] daemon: it caches
+SWHIDs and provenances, and swh.el uses this cache. The =*swh scan*= header
+will tell which way was used.
+
+You can install swhd with [[https://github.com/babashka/bbin][bbin]]:
+
+#+begin_src shell
+bbin install io.github.bzg/swhd
+#+end_src
+
+* Org links
+
+With =(setq swh-org-store-link t)=, =org-store-link= stores links in files
+under Git as this: =[[swh:1:cnt:…;lines=9-15][x.el, lines 9-15]]= opens
+in the archive and exports as a link to it.  In Dired, the link is to
+the file or directory at point.  With =(setq swh-org-store-link
+'ask)=, =org-store-link= asks each time whether to store a =swh:= link or
+the usual one.
+
+* Customization
+
+- =swh-daemon-url=: the daemon URL (default =http://127.0.0.1:8642=);
+  swh.el goes through the daemon when it answers there, else talks to
+  the archive's Web API itself.
+- =swh-archive-url=: the archive's web root, where SWHIDs resolve and
+  whose Web API is used.
+- =swh-org-store-link=: whether =org-store-link= stores =swh:= links
+  (=nil=, =t= or =ask=).
+- =swh-mode-lighters=: the mode-line lighters of =swh-mode=.
+
+* Tests
+
+#+begin_src shell
+emacs -Q -batch -L . -l swh-test.el -f ert-run-tests-batch-and-exit
+#+end_src
+
+* License
+
+Copyright © 2026 Bastien Guerry
+
+The code is distributed under the GNU General Public License version 3
+or later.
