@@ -6,7 +6,8 @@ with a [[https://www.swhid.org][SWHID]], see where the files are already archive
 
 * Commands
 
-- =swh= :: Select =swh-status=, =swh-swhid=, =swh-cite=, =swh-scan= or =swh-save=
+- =swh= :: Select =swh-status=, =swh-visits=, =swh-swhid=, =swh-cite=,
+  =swh-scan= or =swh-save=
 - =swh-status= :: is the repo archived?
 - =swh-visits= :: when was it last visited by SWH?
 - =swh-save= :: save your repository now to SWH

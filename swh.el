@@ -1863,6 +1863,7 @@ ORIGIN, and cite its latest snapshot instead."
 
 (defconst swh--commands
   '((?s "status" "is the repo archived?" swh-status)
+    (?v "visits" "list its last visits" swh-visits)
     (?i "swhid" "copy the SWHID" swh-swhid)
     (?c "cite" "show a BibTeX entry" swh-cite)
     (?n "scan" "show what is archived" swh-scan)
@@ -1872,8 +1873,8 @@ ORIGIN, and cite its latest snapshot instead."
 ;;;###autoload
 (defun swh ()
   "Ask for one of the main commands and call it.
-`swh-status', `swh-swhid', `swh-cite', `swh-scan' or `swh-save'; a
-prefix argument is theirs."
+`swh-status', `swh-visits', `swh-swhid', `swh-cite', `swh-scan' or
+`swh-save'; a prefix argument is theirs."
   (interactive)
   (call-interactively (nth 3 (read-multiple-choice "SWH" swh--commands))))
 
