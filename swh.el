@@ -6,7 +6,7 @@
 ;; Maintainer: Bastien Guerry <bzg@gnu.org>
 ;; Keywords: vc, tools
 ;; URL: https://github.com/bzg/swh.el
-;; Version: 0.1.0
+;; Version: 0.2.0
 ;; Package-Requires: ((emacs "30.1"))
 
 ;; This file is not part of GNU Emacs.
