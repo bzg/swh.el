@@ -24,30 +24,30 @@ instead.
 
 * Install
 
-Requires Emacs 30.1 or later and =git=.
+swh.el requires Emacs >=30.1 and =git=. You can install it with
+=package-vc= and, as a suggestion, bind =C-c s= to copy a SWHID:
 
 #+begin_src emacs-lisp
-(add-to-list 'load-path "/path/to/swh.el")
-(require 'swh)
+(use-package swh
+  :vc (:url "https://github.com/bzg/swh.el")
+  :bind ("C-c s" . swh-swhid))
 #+end_src
 
-To copy a SWHID with =C-c s=:
+Interactively:
 
-#+begin_src emacs-lisp
-(keymap-global-set "C-c s" #'swh-swhid)
-#+end_src
+: M-x package-vc-install RET https://github.com/bzg/swh.el RET
 
-Without a token, the archive allows 120 requests per hour.
+* Token or not token
 
-With a token [[https://archive.softwareheritage.org/api/#authentication][from your archive account]], 1200 requests per hour.
-
-Set the environment variable =SWH_API_TOKEN= (which swhd reads too), or
-add a line in =~/.authinfo.gpg=:
+Without a token, the archive allows 120 requests per hour. With a
+token [[https://archive.softwareheritage.org/api/#authentication][from your archive account]], 1200 requests per hour. Set the
+environment variable =SWH_API_TOKEN= (which swhd reads too), or add a
+line in =~/.authinfo.gpg=:
 
 : machine archive.softwareheritage.org password <token>
 
-Optionally, you can also run the local [[https://github.com/bzg/swhd][swhd]] daemon: it caches
-SWHIDs and provenances, and swh.el uses this cache. The =*swh scan*= header
+Optionally, you can also run the local [[https://github.com/bzg/swhd][swhd]] daemon: it caches SWHIDs
+and provenances, and swh.el uses this cache. The =*swh scan*= header
 will tell which way was used.
 
 You can install swhd with [[https://github.com/babashka/bbin][bbin]]:
@@ -56,15 +56,6 @@ You can install swhd with [[https://github.com/babashka/bbin][bbin]]:
 bbin install io.github.bzg/swhd
 #+end_src
 
-* Org links
-
-With =(setq swh-org-store-link t)=, =org-store-link= stores links in files
-under Git as this: =[[swh:1:cnt:…;lines=9-15][x.el, lines 9-15]]= opens
-in the archive and exports as a link to it.  In Dired, the link is to
-the file or directory at point.  With =(setq swh-org-store-link
-'ask)=, =org-store-link= asks each time whether to store a =swh:= link or
-the usual one.
-
 * Customization
 
 - =swh-daemon-url=: the daemon URL (default =http://127.0.0.1:8642=);
@@ -72,8 +63,8 @@ the usual one.
   the archive's Web API itself.
 - =swh-archive-url=: the archive's web root, where SWHIDs resolve and
   whose Web API is used.
-- =swh-org-store-link=: whether =org-store-link= stores =swh:= links
-  (=nil=, =t= or =ask=).
+- =swh-org-store-link=: whether =org-store-link= stores =swh:= links (=nil=, =t=
+  or =ask=).
 - =swh-mode-lighters=: the mode-line lighters of =swh-mode=.
 
 * Tests
