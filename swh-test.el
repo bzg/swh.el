@@ -269,8 +269,8 @@ Its origin is git@example.org:me/repo.git."
                               (swh-test--last-message (swh-save)))))
     ;; the answer comes at any moment: said, never asked
     (swh-test--with-daemon 200
-        "{\"origin\":\"https://example.org/repo.git\",\"save_request_status\":\"rejected\"}"
-      (should (string-match-p "rejected: the forge"
+        "{\"origin\":\"https://example.org/repo.git\",\"save_request_status\":\"pending\"}"
+      (should (string-match-p "awaits review"
                               (swh-test--last-message (swh-save)))))
     ;; and so does an error, with no command loop to catch it
     (swh-test--with-daemon 502 "{\"error\":\"the save\",\"upstream-status\":500}"

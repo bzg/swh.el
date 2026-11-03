@@ -1599,9 +1599,9 @@ of a public repository, the ORIGIN, and archive it instead."
     (pcase status
       ("accepted"
        (message "Save request accepted for %s" origin))
-      ((or "pending" "rejected")
-       (message "Save request %s: the forge of %s may be unknown to SWH"
-                status origin))
+      ;; a refusal is an HTTP 403, an error
+      ("pending"
+       (message "Save request for %s awaits review by SWH" origin))
       (_
        (message "Save request for %s: %s" origin status)))))
 
