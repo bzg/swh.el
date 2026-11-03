@@ -37,7 +37,7 @@
 ;; `global-swh-mode' turns it on everywhere.
 ;;
 ;; `swh-status' tells whether the repository's origin is archived,
-;; `swh-visits' lists its last visits and `swh-save-code-now' asks to
+;; `swh-visits' lists its last visits and `swh-save' asks to
 ;; archive it.  With a prefix argument, or without a public origin,
 ;; these commands ask for the URL of a public repository instead.
 ;;
@@ -1548,7 +1548,7 @@ last commit pushed is not yet."
 Offer a \"save code now\" when it would help, see `swh--status-text'."
   (pcase-let ((`(,text . ,unsaved) (swh--status-text info)))
     (if (and unsaved (y-or-n-p (concat text "; ask SWH to save it now? ")))
-        (swh-save-code-now (and asked (alist-get 'origin info)))
+        (swh-save (and asked (alist-get 'origin info)))
       (message "%s" text))))
 
 ;;;###autoload
@@ -1579,7 +1579,7 @@ the URL of a public repository, the ORIGIN, and list its visits instead."
                                 (swh--visits-text .origin .visits))))))
 
 ;;;###autoload
-(defun swh-save-code-now (&optional origin)
+(defun swh-save (&optional origin)
   "Ask Software Heritage to archive the current repository now.
 A message tells the answer, see `swh-add-forge-now' when it is refused.
 With a prefix argument, or without a public origin, ask for the URL
@@ -1760,7 +1760,7 @@ Or offer to save ORIGIN, when public."
 ask SWH to save %s now? " origin)))
         ;; through a symbolic link, the file's repository may not
         ;; be the current directory's: then that origin, by name
-        (swh-save-code-now (unless (equal (swh--normalize-origin origin)
+        (swh-save (unless (equal (swh--normalize-origin origin)
                                           (swh--local-origin))
                              origin))
       (message "Copied %s (not archived yet)" what))))

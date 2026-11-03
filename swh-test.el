@@ -266,16 +266,16 @@ Its origin is git@example.org:me/repo.git."
     (swh-test--with-daemon 200
         "{\"origin\":\"https://example.org/repo.git\",\"save_request_status\":\"accepted\"}"
       (should (string-match-p "Save request accepted"
-                              (swh-test--last-message (swh-save-code-now)))))
+                              (swh-test--last-message (swh-save)))))
     ;; the answer comes at any moment: said, never asked
     (swh-test--with-daemon 200
         "{\"origin\":\"https://example.org/repo.git\",\"save_request_status\":\"rejected\"}"
       (should (string-match-p "rejected.*swh-add-forge-now"
-                              (swh-test--last-message (swh-save-code-now)))))
+                              (swh-test--last-message (swh-save)))))
     ;; and so does an error, with no command loop to catch it
     (swh-test--with-daemon 502 "{\"error\":\"the save\",\"upstream-status\":500}"
       (should (string-match-p "answered HTTP 500"
-                              (swh-test--last-message (swh-save-code-now)))))))
+                              (swh-test--last-message (swh-save)))))))
 
 (ert-deftest swh-test-status-upstream ()
   (cl-letf (((symbol-function 'swh--repo-root) (lambda () "/tmp/repo")))
@@ -291,7 +291,7 @@ Its origin is git@example.org:me/repo.git."
         (cl-letf (((symbol-function 'url-retrieve)
                    (swh-test--answering
                     (lambda (_) (swh-test--response-buffer 200 (format json "false")))))
-                  ((symbol-function 'swh-save-code-now) (lambda (&optional _) (setq saved t)))
+                  ((symbol-function 'swh-save) (lambda (&optional _) (setq saved t)))
                   ((symbol-function 'y-or-n-p) (lambda (prompt) (setq asked prompt) nil)))
           (should (string-match-p "upstream 2db1aa0 not yet\\'" (swh-status)))
           (should (string-match-p "save it now" asked))
@@ -486,11 +486,11 @@ SWHIDs in KNOWN are archived, save requests are accepted."
         ;; another origin: the repository's status holds
         (should (string-match-p "Save request accepted for https://example.org/me/other"
                                 (swh-test--last-message
-                                  (swh-save-code-now "https://example.org/me/other"))))
+                                  (swh-save "https://example.org/me/other"))))
         (should (gethash remote swh--origin-memo))
-        (should-error (swh-save-code-now "/srv/git/repo") :type 'user-error)
-        ;; its own, as C-u M-x swh-save-code-now offers it
-        (swh-save-code-now "https://example.org/me/repo")
+        (should-error (swh-save "/srv/git/repo") :type 'user-error)
+        ;; its own, as C-u M-x swh-save offers it
+        (swh-save "https://example.org/me/repo")
         (should-not (gethash remote swh--origin-memo))))
     (swh-test--git dir "remote" "set-url" "origin" "/srv/git/repo")
     (swh-test--with-archive nil nil
@@ -581,7 +581,7 @@ SWHIDs in KNOWN are archived, save requests are accepted."
         (should (equal "Remote files are not supported"
                        (swh-test--user-error (call-interactively command)))))
       ;; no public origin there: the commands that can take one ask for it
-      (dolist (command '(swh-status swh-visits swh-save-code-now swh-cite))
+      (dolist (command '(swh-status swh-visits swh-save swh-cite))
         (should (equal '("https://example.org/me/other")
                        (advice-eval-interactive-spec
                         (cadr (interactive-form command)))))))
@@ -606,7 +606,7 @@ SWHIDs in KNOWN are archived, save requests are accepted."
       ;; not archived: the save is for that origin
       (let ((saved 'none))
         (cl-letf (((symbol-function 'y-or-n-p) #'always)
-                  ((symbol-function 'swh-save-code-now) (lambda (&optional o) (setq saved o))))
+                  ((symbol-function 'swh-save) (lambda (&optional o) (setq saved o))))
           (swh-status "https://example.org/me/new")
           (should (equal "https://example.org/me/new" saved)))))))
 
@@ -621,7 +621,7 @@ SWHIDs in KNOWN are archived, save requests are accepted."
                        "example.org/me/other.git")))
             (pcase-dolist (`(,command . ,verb) '((swh-status . "check")
                                                  (swh-visits . "list the visits of")
-                                                 (swh-save-code-now . "save")
+                                                 (swh-save . "save")
                                                  (swh-cite . "cite")))
               (let ((spec (cadr (interactive-form command))))
                 ;; outside a repository: asked, saying why, and normalized
@@ -1017,7 +1017,7 @@ swh:1:dir:dd, and counts its CALLS."
       (swh-test--with-daemon 200 (swh-test--swhid-json nil)
         (cl-letf (((symbol-function 'y-or-n-p)
                    (lambda (prompt) (setq asked prompt) t))
-                  ((symbol-function 'swh-save-code-now)
+                  ((symbol-function 'swh-save)
                    (lambda (&optional origin) (setq saved origin))))
           (swh-swhid)
           (should (string-match-p "since the last push" asked))
