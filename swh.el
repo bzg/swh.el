@@ -30,6 +30,8 @@
 ;; code and identifies every artifact with a SWHID.  This package tells
 ;; whether the code in front of you is archived, and lets you cite it.
 ;;
+;; `swh' asks for one of the main commands, described below.
+;;
 ;; `swh-swhid' copies the SWHID of the current file or region, or in
 ;; Dired of the file or directory at point.  `swh-cite' shows a BibTeX
 ;; entry citing it, and `org-store-link' stores it as a swh: link.
@@ -1862,6 +1864,24 @@ ORIGIN, and cite its latest snapshot instead."
                  (swh-swhid ?c))))
     (display-buffer (swh--show "*swh cite*" #'bibtex-mode entry))
     entry))
+
+;;; The main commands, from one
+
+(defconst swh--commands
+  '((?s "status" "is the repo archived?" swh-status)
+    (?i "swhid" "copy the SWHID" swh-swhid)
+    (?c "cite" "show a BibTeX entry" swh-cite)
+    (?n "scan" "show what is archived" swh-scan)
+    (?a "save" "ask SWH to archive it" swh-save))
+  "The commands `swh' offers, for `read-multiple-choice', then the command.")
+
+;;;###autoload
+(defun swh ()
+  "Ask for one of the main commands and call it.
+`swh-status', `swh-swhid', `swh-cite', `swh-scan' or `swh-save'; a
+prefix argument is theirs."
+  (interactive)
+  (call-interactively (nth 3 (read-multiple-choice "SWH" swh--commands))))
 
 ;;; Org links
 
