@@ -6,7 +6,7 @@
 ;; Maintainer: Bastien Guerry <bzg@gnu.org>
 ;; Keywords: vc, tools
 ;; URL: https://github.com/bzg/swh.el
-;; Version: 0.2.0
+;; Version: 0.3.0
 ;; Package-Requires: ((emacs "30.1"))
 
 ;; This file is not part of GNU Emacs.
@@ -32,7 +32,7 @@
 ;;
 ;; `swh' asks for one of the main commands, described below.
 ;;
-;; `swh-swhid' copies the SWHID of the current file or region, or in
+;; `swh-swhid-copy' copies the SWHID of the current file or region, or in
 ;; Dired of the file or directory at point.  `swh-cite' shows a BibTeX
 ;; entry citing it, and `org-store-link' stores it as a swh: link.
 ;; `swh-mode' shows the archival status in the mode line;
@@ -59,6 +59,7 @@
 (require 'seq)
 (require 'vc-git)
 (require 'outline)
+(require 'transient)
 
 (defgroup swh nil
   "Software Heritage client."
@@ -85,6 +86,14 @@ With `ask', ask each time.  Org prefers such links to file: links;
                  (const :tag "Yes" t)
                  (const :tag "Ask each time" ask))
   :package-version '(swh . "0.1"))
+
+(defcustom swh-swhid-without-context nil
+  "Whether the SWHID commands take the bare SWHID, without context.
+That is, `swh-swhid-copy', `swh-swhid-copy-link', `swh-swhid-open' and
+`swh-swhid-copy-archived', called interactively: their BARE argument.
+A prefix argument, or the switch in `swh', negates it."
+  :type 'boolean
+  :package-version '(swh . "0.3"))
 
 (defcustom swh-mode-lighters
   '((archived . " SWH✓")
@@ -1438,7 +1447,7 @@ ask first; after a failure, calling the command again resumes."
 (defun swh-provenance ()
   "Show where the archive found the artifact at point, or the current file.
 In the `swh-scan' report, the line's file or directory; elsewhere,
-what `swh-swhid' would take.  An origin and the release or revision
+what `swh-swhid-copy' would take.  An origin and the release or revision
 holding it there, whose link is copied.  The API needs a special token."
   (interactive)
   (let* ((scan (derived-mode-p 'swh-scan-mode))
@@ -1677,78 +1686,111 @@ none, or on . or ...  A `user-error' outside Git, nil with NOERROR."
                               "refs/remotes/")))
              "the commit holding it is not pushed")))))
 
-(defconst swh--swhid-forms
-  '((?s "swhid" "qualified SWHID")
-    (?b "bare" "SWHID w/o context")
-    (?l "link" "SWH archive permalink")
-    (?L "bare link" "permalink w/o context")
-    (?o "open" "open in SWH archive")
-    (?c "bibtex" "BibTeX entry")
-    (?a "archived" "SWHID of SWH-archived version"))
-  "The forms `swh-swhid' offers, for `read-multiple-choice'.")
+(defun swh--without-context-p ()
+  "Whether a SWHID command called interactively goes without context.
+`swh-swhid-without-context', or the switch of `swh' when called from
+it, negated by a prefix argument."
+  (xor current-prefix-arg
+       (if (eq transient-current-command 'swh)
+           (transient-arg-value "--without-context" (transient-args 'swh))
+         swh-swhid-without-context)))
 
-;;;###autoload
-(defun swh-swhid (&optional form path)
-  "Copy the qualified SWHID of the current file, or of the region's lines.
-In Dired, of the file or directory at point; outside a file buffer,
-of the current directory.  PATH, when given, is the file or directory.
-With a prefix argument, ask for another FORM, a character:
-  ?s  the qualified SWHID;
-  ?b  the bare SWHID;
-  ?l  the archive's permalink, ?L with the bare SWHID;
-  ?o  open it in the archive's web interface;
-  ?c  a BibTeX entry citing it, see `swh-cite';
-  ?a  the SWHID of the version the archive holds, see `swh--archived-target'.
-The message tells when the archive does not hold it, and why.  Return
-the text."
-  (interactive (list (and current-prefix-arg
-                          (car (read-multiple-choice "SWHID" swh--swhid-forms)))))
-  (let* ((form (or form ?s))
-         (archived-version (eq form ?a))
-         (path (cond (path)
+(defun swh--swhid-copy (what &optional bare path)
+  "Copy WHAT of the current file or region's lines, or of PATH, and return it.
+In Dired, of the file or directory at point; outside a file buffer, of
+the current directory.  WHAT is one of:
+  `swhid'     the qualified SWHID;
+  `link'      the archive's permalink;
+  `open'      open it in the archive's web interface instead;
+  `bibtex'    a BibTeX entry citing it, see `swh-cite';
+  `archived'  the SWHID of the version the archive holds.
+With BARE, the bare SWHID, without context, rather than the qualified
+one.  The message tells when the archive does not hold it, and why."
+  (let* ((path (cond (path)
                      ((buffer-file-name (buffer-base-buffer)) (swh--file-name))
                      (t (swh--dir-name nil t))))
          ;; once saved: a save hook may have moved them
          (lines (swh--region-lines))
-         (info (swh--qualified-swhid path lines archived-version))
+         (info (swh--qualified-swhid path lines (eq what 'archived)))
          (version (alist-get 'version info))
          ;; the region's lines are those of the working tree's version
          (lines (unless version lines)))
-    (pcase-let ((`(,text . ,what) (swh--swhid-form-text info lines form path)))
+    (pcase-let ((`(,text . ,label) (swh--swhid-text info lines what bare path)))
       (let-alist info
-        (if (and .archived (eq form ?o))
-            (progn (browse-url (swh--browse-url .swhid))
+        (if (and .archived (eq what 'open))
+            (progn (browse-url (swh--browse-url text))
                    (message "Opening in the SWH archive"))
           (kill-new text)
           (cond (.unchecked
                  (message "Copied %s (not checked against the archive: %s)"
-                          what .unchecked))
-                ((not .archived) (swh--swhid-unarchived what path .origin))
-                (t (message "Copied %s%s" what
+                          label .unchecked))
+                ((not .archived) (swh--swhid-unarchived label path .origin))
+                (t (message "Copied %s%s" label
                             (if version
                                 (format " (version of commit %s)"
                                         (swh--short-hash version))
                               ""))))))
       text)))
 
-(defun swh--swhid-form-text (info lines form path)
-  "(TEXT . WHAT): FORM, see `swh-swhid', for the SWHID INFO of PATH or LINES."
-  (if (eq form ?c)
+(defun swh--swhid-text (info lines what bare path)
+  "(TEXT . LABEL): WHAT, BARE, see `swh--swhid-copy', for INFO of PATH or LINES.
+LABEL says what TEXT is, for the messages."
+  (if (eq what 'bibtex)
       (pcase-let ((`(,entry . ,why) (swh--bibtex info lines (swh--repo-root-of path))))
         ;; say what it is rather than show it: it spans lines
         (cons entry (swh--citation-what why)))
-    (cons (let-alist info
-            (let ((bare (concat .core (and lines (concat ";lines=" lines)))))
-              (pcase form
-                ((or ?s ?o ?a) .swhid)
-                (?b bare)
-                (?l (swh--browse-url .swhid))
-                (?L (swh--browse-url bare)))))
-          ;; not archived, ?o opens nothing and ?a finds no version
-          (nth 2 (assq (if (and (memq form '(?o ?a)) (not (alist-get 'archived info)))
-                           ?s
-                         form)
-                       swh--swhid-forms)))))
+    (let-alist info
+      (let ((swhid (if bare (concat .core (and lines (concat ";lines=" lines))) .swhid)))
+        (if (eq what 'link)
+            (cons (swh--browse-url swhid)
+                  (if bare "permalink w/o context" "SWH archive permalink"))
+          ;; not archived, `open' opens nothing and `archived' finds no
+          ;; version: the SWHID is copied instead
+          (cons swhid (cond ((and .archived (eq what 'archived))
+                             (if bare "SWHID w/o context of SWH-archived version"
+                               "SWHID of SWH-archived version"))
+                            (bare "SWHID w/o context")
+                            (t "qualified SWHID"))))))))
+
+;;;###autoload
+(defun swh-swhid-copy (&optional bare path)
+  "Copy the SWHID of the current file, or of the region's lines.
+In Dired, of the file or directory at point; outside a file buffer,
+of the current directory.  PATH, when given, is the file or directory.
+Qualified, or with BARE without context, see
+`swh-swhid-without-context'.  The message tells when the archive does
+not hold it, and why.  Return the SWHID."
+  (interactive (list (swh--without-context-p)))
+  (swh--swhid-copy 'swhid bare path))
+
+;;;###autoload
+(defun swh-swhid-copy-link (&optional bare)
+  "Copy the archive's permalink to the current file or region.
+With BARE, the link to the bare SWHID, without context, see
+`swh-swhid-without-context'."
+  (interactive (list (swh--without-context-p)))
+  (swh--swhid-copy 'link bare))
+
+;;;###autoload
+(defun swh-swhid-open (&optional bare)
+  "Open the current file or region in the archive's web interface.
+With BARE, its bare SWHID, without context, see
+`swh-swhid-without-context'.  When the archive does not hold it, copy
+its SWHID instead."
+  (interactive (list (swh--without-context-p)))
+  (swh--swhid-copy 'open bare))
+
+;;;###autoload
+(defun swh-swhid-copy-archived (&optional bare)
+  "Copy the SWHID of the version of the current file the archive holds.
+Anchored on the commit holding it: when the file changed since it was
+archived, a SWHID the archive already resolves.  With BARE, without
+context, see `swh-swhid-without-context'."
+  (interactive (list (swh--without-context-p)))
+  (swh--swhid-copy 'archived bare))
+
+;;;###autoload
+(define-obsolete-function-alias 'swh-swhid #'swh-swhid-copy "0.3.0")
 
 (defun swh--swhid-unarchived (what path origin)
   "Say why the archive does not hold PATH, WHAT of which was just copied.
@@ -1860,28 +1902,39 @@ ORIGIN, and cite its latest snapshot instead."
                      (kill-new text)
                      (message "Copied %s for %s" (swh--citation-what why) origin)
                      text)
-                 (swh-swhid ?c))))
+                 (swh--swhid-copy 'bibtex))))
     (display-buffer (swh--show "*swh cite*" #'bibtex-mode entry))
     entry))
 
 ;;; The main commands, from one
 
-(defconst swh--commands
-  '((?s "status" "is the repo archived?" swh-status)
-    (?v "visits" "list its last visits" swh-visits)
-    (?i "swhid" "copy the SWHID" swh-swhid)
-    (?c "cite" "show a BibTeX entry" swh-cite)
-    (?n "scan" "show what is archived" swh-scan)
-    (?a "save" "ask SWH to archive it" swh-save))
-  "The commands `swh' offers, for `read-multiple-choice', then the command.")
-
-;;;###autoload
-(defun swh ()
-  "Ask for one of the main commands and call it.
-`swh-status', `swh-visits', `swh-swhid', `swh-cite', `swh-scan' or
-`swh-save'; a prefix argument is theirs."
-  (interactive)
-  (call-interactively (nth 3 (read-multiple-choice "SWH" swh--commands))))
+;;;###autoload (autoload 'swh "swh" nil t)
+(transient-define-prefix swh ()
+  "Offer the main commands.
+`swh-save', `swh-status', `swh-scan', `swh-provenance', `swh-visits',
+`swh-cite', `swh-swhid-copy', `swh-swhid-copy-archived', `swh-swhid-open'
+and `swh-swhid-copy-link'; \\[universal-argument] typed in the menu before
+one gives it a prefix argument.
+The switch, set from `swh-swhid-without-context', says whether the
+SWHID commands take the bare SWHID, without context; a prefix argument
+negates it."
+  [["SWH Archive"
+    ("a" "Save: ask SWH to save code now" swh-save)
+    ("s" "Status: is the repo archived?" swh-status)
+    ("S" "Scan: show what is archived" swh-scan)
+    ("p" "Provenance: where does the file/dir come from?" swh-provenance)
+    ("v" "Visits: list its last visits" swh-visits)
+    ("c" "Cite: show a BibTeX entry" swh-cite)]
+   ["SWHID"
+    ("-w" "SWHID: without context" "--without-context"
+     :init-value (lambda (obj)
+                   (oset obj value (and swh-swhid-without-context
+                                        "--without-context"))))
+    ""
+    ("i" "SWHID: copy" swh-swhid-copy)
+    ("I" "SWHID: copy the archived version" swh-swhid-copy-archived)
+    ("o" "SWHID: open in the archive" swh-swhid-open)
+    ("l" "SWHID: copy the archive link" swh-swhid-copy-link)]])
 
 ;;; Org links
 
@@ -1976,11 +2029,13 @@ One of archived, not-archived, origin-archived, pending or error.")
 (defvar swh-mode)
 
 (defun swh-mode-line-copy (event)
-  "Copy the qualified SWHID of the file whose lighter got the mouse EVENT.
-In Dired, that of the directory, see `swh-swhid'."
+  "Copy the SWHID of the file whose lighter got the mouse EVENT.
+In Dired, that of the directory.  Qualified, or bare when
+`swh-swhid-without-context' says so, see `swh-swhid-copy'."
   (interactive "e")
   (with-selected-window (posn-window (event-start event))
-    (swh-swhid nil (unless (buffer-file-name (buffer-base-buffer)) (swh--dir-name)))))
+    (swh-swhid-copy swh-swhid-without-context
+                    (unless (buffer-file-name (buffer-base-buffer)) (swh--dir-name)))))
 
 (defvar-keymap swh-mode-line-map
   :doc "Keymap of the `swh-mode' lighter."
@@ -2137,8 +2192,8 @@ the buffer is gone or a later check started."
   "Show in the mode line whether the file's content is in the archive.
 The status, a lighter of `swh-mode-lighters', is checked when the mode
 is turned on and after each save; in Dired, when the directory is
-read in.  Clicking the lighter copies the qualified SWHID, see
-`swh-swhid'.  Without a token, the lighter also counts the API's
+read in.  Clicking the lighter copies the SWHID, see
+`swh-mode-line-copy'.  Without a token, the lighter also counts the API's
 hourly requests used, e.g. 48/120."
   :lighter swh-mode-line-format
   (if swh-mode

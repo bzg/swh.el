@@ -6,12 +6,15 @@ with a [[https://www.swhid.org][SWHID]], see where the files are already archive
 
 * Commands
 
-- =swh= :: Select =swh-status=, =swh-visits=, =swh-swhid=, =swh-cite=,
-  =swh-scan= or =swh-save=
+- =swh= :: a menu of the commands below
 - =swh-status= :: is the repo archived?
 - =swh-visits= :: when was it last visited by SWH?
 - =swh-save= :: save your repository now to SWH
-- =swh-swhid= :: copy the SWHID of the current directory/file/region
+- =swh-swhid-copy= :: copy the SWHID of the current directory/file/region
+- =swh-swhid-copy-archived= :: copy the SWHID of the version the SWH
+  archive holds
+- =swh-swhid-copy-link= :: copy the link to it in the SWH archive
+- =swh-swhid-open= :: open it in the SWH archive
 - =swh-cite= :: show a BibTeX entry citing the code
 - =swh-scan= :: show the repository's tracked files as a tree
 - =swh-provenance= :: tell where the archive found the file's content,
@@ -19,8 +22,11 @@ with a [[https://www.swhid.org][SWHID]], see where the files are already archive
 - =swh-mode= :: show in mode line if the file/directory is archived
 
 With =C-u=, or where there is no public origin, =swh-status=, =swh-visits=,
-=swh-save= and =swh-cite= ask for the URL of a public repository
-instead.
+=swh-save= and =swh-cite= ask for the URL of a public repository instead.
+
+By default, =swh-swhid-without-context= is nil so =SWHID= commands provide
+their context. You can negate this option with C-u on those commands
+or toggling the =-w= switch in the transient menu after =M-x swh RET=.
 
 * Install
 
@@ -30,7 +36,7 @@ swh.el requires Emacs >=30.1 and =git=. You can install it with
 #+begin_src emacs-lisp
 (use-package swh
   :vc (:url "https://github.com/bzg/swh.el")
-  :bind ("C-c s" . swh-swhid))
+  :bind ("C-c s" . swh))
 #+end_src
 
 Interactively:

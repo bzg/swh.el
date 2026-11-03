@@ -583,7 +583,7 @@ SWHIDs in KNOWN are archived, save requests are accepted."
     ;; refused before any connection
     (cl-letf (((symbol-function 'vc-git-root) (lambda (&rest _) (error "Connected")))
               ((symbol-function 'read-string) (lambda (&rest _) "example.org/me/other")))
-      (dolist (command '(swh-swhid swh-scan swh-provenance))
+      (dolist (command '(swh-swhid-copy swh-scan swh-provenance))
         (should (equal "Remote files are not supported"
                        (swh-test--user-error (call-interactively command)))))
       ;; no public origin there: the commands that can take one ask for it
@@ -1025,7 +1025,7 @@ swh:1:dir:dd, and counts its CALLS."
                    (lambda (prompt) (setq asked prompt) t))
                   ((symbol-function 'swh-save)
                    (lambda (&optional origin) (setq saved origin))))
-          (swh-swhid)
+          (swh-swhid-copy)
           (should (string-match-p "since the last push" asked))
           ;; the current repository's: saved its own way, the daemon's
           (should (null saved))
@@ -1037,7 +1037,7 @@ swh:1:dir:dd, and counts its CALLS."
                   (swh-test--git other "init" "-q")
                   (swh-test--git other "remote" "add" "origin" "https://example.org/me/other")
                   (setq default-directory (file-name-as-directory other))
-                  (swh-swhid)
+                  (swh-swhid-copy)
                   (should (equal "https://example.org/me/repo" saved)))
               (delete-directory other t))))))))
 
@@ -1059,7 +1059,7 @@ swh:1:dir:dd, and counts its CALLS."
                 (when (equal name "sub/b.txt") (with-temp-file path (insert "changed\n")))
                 (setq buffer-file-name path)
                 (set-buffer-modified-p nil)
-                (swh-swhid)
+                (swh-swhid-copy)
                 (should (string-suffix-p (format "(not archived: %s)" why) said))
                 ;; saving would not archive it: not offered
                 (should-not asked)))
@@ -1071,12 +1071,12 @@ swh:1:dir:dd, and counts its CALLS."
             (swh-test--git dir "commit" "-q" "-am" "two")
             (setq buffer-file-name (expand-file-name "a.txt" dir))
             (set-buffer-modified-p nil)
-            (swh-swhid)
+            (swh-swhid-copy)
             (should (string-match-p "since the last push" asked))
             (setq asked nil)
             (setq buffer-file-name (expand-file-name "sub/b.txt" dir))
             (set-buffer-modified-p nil)
-            (swh-swhid)
+            (swh-swhid-copy)
             (should (string-suffix-p "(not archived: the commit holding it is not pushed)" said))
             (should-not asked)))))))
 
@@ -1085,22 +1085,22 @@ swh:1:dir:dd, and counts its CALLS."
     (let ((kill-ring nil)
           (bare swh-test--core))
       (swh-test--with-daemon 200 (swh-test--swhid-json t)
-        (should (equal swh-test--qualified (swh-swhid ?s)))
+        (should (equal swh-test--qualified (swh-swhid-copy)))
         (should (equal swh-test--qualified (car kill-ring)))
-        (should (equal bare (swh-swhid ?b)))
+        (should (equal bare (swh-swhid-copy t)))
         (should (equal (concat "https://archive.softwareheritage.org/" swh-test--qualified)
-                       (swh-swhid ?l)))
-        (should (equal (car kill-ring) (swh-swhid ?l)))
+                       (swh-swhid-copy-link)))
+        (should (equal (car kill-ring) (swh-swhid-copy-link)))
         ;; without the contextual information: the bare content SWHID
         (should (equal (concat "https://archive.softwareheritage.org/" bare)
-                       (swh-swhid ?L)))
+                       (swh-swhid-copy-link t)))
         ;; the lines stay, as the archive keeps them
         (cl-letf (((symbol-function 'use-region-p) (lambda () t)))
           (set-mark 5)
           (goto-char 11)
-          (should (equal (concat bare ";lines=2-3") (swh-swhid ?b)))
+          (should (equal (concat bare ";lines=2-3") (swh-swhid-copy t)))
           (should (equal (concat "https://archive.softwareheritage.org/" bare ";lines=2-3")
-                         (swh-swhid ?L))))))))
+                         (swh-swhid-copy-link t))))))))
 
 (ert-deftest swh-test-swhid-of-a-directory ()
   (swh-test--with-repo
@@ -1116,18 +1116,18 @@ swh:1:dir:dd, and counts its CALLS."
             ;; a region does not make lines of a directory
             (cl-letf (((symbol-function 'use-region-p) (lambda () t)))
               (let ((swhid (concat core context ";anchor=swh:1:rev:" rev ";path=/sub")))
-                (should (equal swhid (swh-swhid)))
+                (should (equal swhid (swh-swhid-copy)))
                 (should (equal swhid (car kill-ring)))
                 (should (equal (concat "https://archive.softwareheritage.org/" swhid)
-                               (swh-swhid ?l)))
+                               (swh-swhid-copy-link)))
                 (should (equal (concat "https://archive.softwareheritage.org/" core)
-                               (swh-swhid ?L)))
+                               (swh-swhid-copy-link t)))
                 ;; in Dired, the directory at point
                 (let ((buffer (dired-noselect dir)))
                   (unwind-protect
                       (with-current-buffer buffer
                         (dired-goto-file (expand-file-name "sub" dir))
-                        (should (equal swhid (swh-swhid)))
+                        (should (equal swhid (swh-swhid-copy)))
                         ;; and `swh-provenance' takes the same target
                         (let (asked)
                           (cl-letf (((symbol-function 'swh--provenance)
@@ -1139,7 +1139,7 @@ swh:1:dir:dd, and counts its CALLS."
           (with-temp-file (expand-file-name "sub/b.txt" dir) (insert "new\n"))
           (swh-test--with-archive "https://example.org/me/repo" nil
             (cl-letf (((symbol-function 'y-or-n-p) #'ignore))
-              (let ((swhid (swh-swhid)))
+              (let ((swhid (swh-swhid-copy)))
                 (should (string-prefix-p "swh:1:dir:" swhid))
                 (should-not (string-prefix-p core swhid))
                 (should (string-suffix-p context swhid))))))))
@@ -1150,7 +1150,7 @@ swh:1:dir:dd, and counts its CALLS."
       (swh-test--with-archive "https://example.org/me/repo"
           (list (concat "swh:1:rev:" (swh-test--git dir "rev-parse" "HEAD")))
         (cl-letf (((symbol-function 'y-or-n-p) #'ignore))
-          (should (string-suffix-p ";path=/" (swh-swhid))))))))
+          (should (string-suffix-p ";path=/" (swh-swhid-copy))))))))
 
 (ert-deftest swh-test-swhid-archived-commit ()
   (swh-test--with-file
@@ -1164,14 +1164,14 @@ swh:1:dir:dd, and counts its CALLS."
         ;; HEAD, not archived, holds a.txt as ONE does: anchored at ONE
         (with-temp-file (expand-file-name "sub/b.txt" dir) (insert "two\n"))
         (swh-test--git dir "commit" "-q" "-am" "two")
-        (should (equal anchored (swh-swhid)))
-        ;; a.txt changed since: ?a gives ONE's version, and the
+        (should (equal anchored (swh-swhid-copy)))
+        ;; a.txt changed since: `archived' gives ONE's version, and the
         ;; region's lines, of the working tree, do not apply to it
         (with-temp-file file (insert "new\n"))
         (swh-test--git dir "commit" "-q" "-am" "three")
         (cl-letf (((symbol-function 'swh--file-name) (lambda () file))
                   ((symbol-function 'swh--region-lines) (lambda () "1")))
-          (should (equal anchored (swh-swhid ?a))))))))
+          (should (equal anchored (swh-swhid-copy-archived))))))))
 
 (ert-deftest swh-test-swhid-without-the-archive ()
   ;; Git alone gives the bare SWHID, and it says so
@@ -1183,7 +1183,7 @@ swh:1:dir:dd, and counts its CALLS."
                    (lambda (&rest _) (user-error "Cannot reach the archive"))))
           (should (string-match-p "not checked against the archive: Cannot reach"
                                   (swh-test--last-message
-                                    (should (equal core (swh-swhid))))))
+                                    (should (equal core (swh-swhid-copy))))))
           (should (equal core (car kill-ring))))))))
 
 (ert-deftest swh-test-swhid-of-a-linked-directory ()
@@ -1197,7 +1197,7 @@ swh:1:dir:dd, and counts its CALLS."
         (setq default-directory (expand-file-name "link/" dir))
         (swh-test--with-archive "https://example.org/me/repo" (list core)
           (let ((kill-ring nil))
-            (should (string-prefix-p (concat core ";") (swh-swhid))))))))
+            (should (string-prefix-p (concat core ";") (swh-swhid-copy))))))))
   ;; to a directory outside any repository: refused, whatever the backend
   (swh-test--with-repo
     (let ((out (make-temp-file "swh-test" t)))
@@ -1209,7 +1209,7 @@ swh:1:dir:dd, and counts its CALLS."
               (let ((swh--daemon-checked (swh-test--daemon)) (requested nil))
                 (cl-letf (((symbol-function 'url-retrieve)
                            (swh-test--answering (lambda (_) (setq requested t) nil))))
-                  (should-error (swh-swhid) :type 'user-error)
+                  (should-error (swh-swhid-copy) :type 'user-error)
                   (should-not requested)))))
         (delete-directory out t)))))
 
@@ -1228,7 +1228,7 @@ swh:1:dir:dd, and counts its CALLS."
           ;; "bbb": line 2, line 3 once saved
           (set-mark 5)
           (goto-char 9)
-          (should (string-suffix-p ";lines=3" (swh-swhid ?b))))))))
+          (should (string-suffix-p ";lines=3" (swh-swhid-copy t))))))))
 
 ;; The archive's answer to a citation request for swh-test--qualified
 (defconst swh-test--citation
@@ -1267,7 +1267,7 @@ swh:1:dir:dd, and counts its CALLS."
           (swh-test--with-daemon 200 (swh-test--swhid-json archived)
             (cl-letf (((symbol-function 'swh--api)
                        (lambda (&rest _) (if status (list status nil nil) (error "Asked")))))
-              (should (equal minimal (swh-swhid ?c)))
+              (should (equal minimal (swh--swhid-copy 'bibtex)))
               (should (equal minimal (car kill-ring)))
               (should (equal (format "Copied a minimal BibTeX entry (%s)" why) said)))))))))
 
