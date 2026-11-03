@@ -1583,7 +1583,7 @@ the URL of a public repository, the ORIGIN, and list its visits instead."
 ;;;###autoload
 (defun swh-save (&optional origin)
   "Ask Software Heritage to archive the current repository now.
-A message tells the answer, see `swh-add-forge-now' when it is refused.
+A message tells the answer.
 With a prefix argument, or without a public origin, ask for the URL
 of a public repository, the ORIGIN, and archive it instead."
   (interactive (list (swh--origin-arg "save")))
@@ -1600,16 +1600,10 @@ of a public repository, the ORIGIN, and archive it instead."
       ("accepted"
        (message "Save request accepted for %s" origin))
       ((or "pending" "rejected")
-       (message "Save request %s: the forge of %s may be unknown to SWH (%s)"
-                status origin (substitute-command-keys "\\[swh-add-forge-now]")))
+       (message "Save request %s: the forge of %s may be unknown to SWH"
+                status origin))
       (_
        (message "Save request for %s: %s" origin status)))))
-
-;;;###autoload
-(defun swh-add-forge-now ()
-  "Open the form asking Software Heritage to add a forge, see `swh-archive-url'."
-  (interactive)
-  (browse-url (concat (swh--base-url swh-archive-url) "/add-forge/request/create/")))
 
 ;;; The SWHID of the file at hand
 

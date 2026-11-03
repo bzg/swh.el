@@ -10,7 +10,6 @@ with a [[https://www.swhid.org][SWHID]], see where the files are already archive
 - =swh-status= :: is the repo archived?
 - =swh-visits= :: when was it last visited by SWH?
 - =swh-save= :: save your repository now to SWH
-- =swh-add-forge-now= :: open the "Add forge now" form
 - =swh-swhid= :: copy the SWHID of the current directory/file/region
 - =swh-cite= :: show a BibTeX entry citing the code
 - =swh-scan= :: show the repository's tracked files as a tree
