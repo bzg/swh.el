@@ -181,6 +181,12 @@ Its origin is git@example.org:me/repo.git."
     (swh-test--with-daemon status json
       (should (string-match-p said (swh-test--user-error
                                     (swh--daemon "GET" "/origin" :path "/tmp/repo"))))))
+  ;; the archive's reason, told as swhd tells it
+  (should (string-match-p "HTTP 403 (the save request: not allowed)\\'"
+                          (swh-test--user-error
+                           (swh--api-body '(403 ((exception . "ForbiddenExc")
+                                                 (reason . "not allowed")))
+                                          "the save request"))))
   ;; an empty object is an answer
   (swh-test--with-daemon 200 "{}"
     (should (null (swh--daemon "GET" "/origin" :path "/tmp/repo"))))

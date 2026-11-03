@@ -551,8 +551,13 @@ See `swh--api-answer'; errors go to FAILED as in `swh--showing-errors'."
                         failed)))
 
 (defun swh--api-body (resp what)
-  "The parsed body of the 2xx response RESP; a `user-error' about WHAT otherwise."
-  (cond ((not (swh--2xx-p resp)) (swh--archive-answered (swh--resp-status resp) what))
+  "The parsed body of the 2xx response RESP; a `user-error' about WHAT otherwise.
+The error tells the reason the archive gives, if any, as swhd does."
+  (cond ((not (swh--2xx-p resp))
+         (let* ((body (swh--resp-body resp))
+                (reason (and (consp body) (alist-get 'reason body))))
+           (swh--archive-answered (swh--resp-status resp)
+                                  (if (stringp reason) (concat what ": " reason) what))))
         ((eq (swh--resp-body resp) 'not-json)
          (user-error "The Software Heritage archive answered no JSON (%s)" what))
         (t (swh--resp-body resp))))
