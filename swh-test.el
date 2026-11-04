@@ -283,6 +283,33 @@ Its origin is git@example.org:me/repo.git."
       (should (string-match-p "answered HTTP 500"
                               (swh-test--last-message (swh-save)))))))
 
+(ert-deftest swh-test-refresh ()
+  "What may have changed is forgotten, here and by swhd; what is archived is kept."
+  (let ((swh--daemon-checked nil)
+        (swh--auth-source-memo nil)
+        (swh--known-memo (make-hash-table :test #'equal))
+        (swh--origin-memo (make-hash-table :test #'equal))
+        (swh--provenance-memo (make-hash-table :test #'equal))
+        (swh--provenance-refused 'daemon)
+        (asked nil))
+    (swh--memo-put swh--known-memo "swh:1:cnt:aa" nil)
+    (swh--memo-put swh--known-memo "swh:1:cnt:bb" t)
+    (swh--memo-put swh--origin-memo "https://example.org/repo" '((archived . nil)))
+    (cl-letf (((symbol-function 'url-retrieve)
+               (swh-test--answering
+                (lambda (url)
+                  (push url asked)
+                  (swh-test--response-buffer
+                   200 (if (string-suffix-p "/ping" url)
+                           "{\"pong\":true,\"version\":\"0.10.0\"}"
+                         "{\"forgotten\":true}"))))))
+      (with-temp-buffer (swh-refresh)))
+    (should (eq 'unknown (swh--memo-get swh--known-memo "swh:1:cnt:aa")))
+    (should (eq t (swh--memo-get swh--known-memo "swh:1:cnt:bb")))
+    (should (zerop (hash-table-count swh--origin-memo)))
+    (should-not swh--provenance-refused)
+    (should (seq-some (lambda (url) (string-suffix-p "/forget" url)) asked))))
+
 (ert-deftest swh-test-status-upstream ()
   (cl-letf (((symbol-function 'swh--repo-root) (lambda () "/tmp/repo")))
     (let ((swh--daemon-checked (swh-test--daemon))

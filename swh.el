@@ -6,7 +6,7 @@
 ;; Maintainer: Bastien Guerry <bzg@gnu.org>
 ;; Keywords: vc, tools
 ;; URL: https://github.com/bzg/swh.el
-;; Version: 0.3.1
+;; Version: 0.4.0
 ;; Package-Requires: ((emacs "30.1"))
 
 ;; This file is not part of GNU Emacs.
@@ -42,6 +42,8 @@
 ;; `swh-visits' lists its last visits and `swh-save' asks to
 ;; archive it.  With a prefix argument, or without a public origin,
 ;; these commands ask for the URL of a public repository instead.
+;; `swh-refresh' forgets what may have changed in the archive since it
+;; was asked, e.g. once it has visited the repository.
 ;;
 ;; `swh-scan' shows which parts of the working tree are archived;
 ;; there, `swh-provenance' tells where the archive found them, if your
@@ -305,13 +307,15 @@ See `swh--retrieve-async'."
 (defvar swh--daemon-outdated-warned nil
   "Non-nil once the user has been told that swhd is outdated.")
 
-(defun swh--daemon-version-ok-p (pong)
+(defun swh--daemon-version-ok-p (pong &optional min-version)
   "Whether PONG, the daemon's /ping, comes from a recent enough swhd.
-0.9.0-dev counts as 0.9.0."
+MIN-VERSION, by default `swh-daemon-min-version', or later; 0.9.0-dev
+counts as 0.9.0."
   (let ((version (and (listp pong) (alist-get 'version pong))))
     (and (stringp version)
          (string-match "\\`[0-9]+\\(?:\\.[0-9]+\\)*" version)
-         (not (version< (match-string 0 version) swh-daemon-min-version)))))
+         (not (version< (match-string 0 version)
+                        (or min-version swh-daemon-min-version))))))
 
 (defun swh--daemon-ping ()
   "The daemon's answer to /ping, nil when it is gone or too old (warned once)."
@@ -599,6 +603,12 @@ A non-nil VALUE holds for the session, nil for `swh--memo-ttl' seconds."
   (puthash key (cons (float-time) value) memo)
   value)
 
+(defun swh--forget-negatives (memo)
+  "Forget the negative answers MEMO holds, see `swh--memo-get'.
+The archive may have got their artifacts since; what it holds stays
+so: the positive answers are kept."
+  (maphash (lambda (key answer) (unless (cdr answer) (remhash key memo))) memo))
+
 (defun swh--known-p (swhid)
   "Whether `swh--known-memo' says that the archive holds SWHID."
   (eq t (swh--memo-get swh--known-memo swhid)))
@@ -740,9 +750,8 @@ INFO is ROOT's origin; nil when not archived, or without a remote upstream."
                  (remhash remote swh--origin-memo)))
              swh--origin-memo))
   ;; a SWHID tells not which origin holds it: forget every "not
-  ;; archived", what the archive holds stays so
-  (maphash (lambda (swhid answer) (unless (cdr answer) (remhash swhid swh--known-memo)))
-           swh--known-memo))
+  ;; archived"
+  (swh--forget-negatives swh--known-memo))
 
 (defun swh--save-origin-async (origin callback)
   "Ask the archive to save ORIGIN now; CALLBACK gets the save request."
@@ -1630,6 +1639,34 @@ of a public repository, the ORIGIN, and archive it instead."
       (_
        (message "Save request for %s: %s" origin status)))))
 
+;;;###autoload
+(defun swh-refresh ()
+  "Forget what may have changed in the archive, and check the buffer again.
+That is the status of the origins, that the archive does not hold an
+artifact or knows no provenance for it, and its refusal of the
+provenance API: answers kept for ten minutes, or the session.  What
+the archive holds stays so, and is kept.  swhd, when it runs, forgets
+them too, from 0.10.0 on.  Then `swh-mode' checks the status of the
+buffer anew."
+  (interactive)
+  (clrhash swh--origin-memo)
+  (swh--forget-negatives swh--known-memo)
+  (swh--forget-negatives swh--provenance-memo)
+  (setq swh--provenance-refused nil
+        swh--auth-source-memo nil
+        ;; swhd may have started, or stopped
+        swh--daemon-checked nil)
+  (let ((why (when-let* ((pong (swh--daemon-pong)))
+               (cond ((not (swh--daemon-version-ok-p pong "0.10.0"))
+                      (format "it needs 0.10.0, not %s" (alist-get 'version pong)))
+                     ;; not for the command to stop at: swh.el forgot
+                     ((condition-case err
+                          (ignore (swh--daemon "POST" "/forget"))
+                        (user-error (error-message-string err))))))))
+    (swh--refresh)
+    (message "Forgot what may have changed in the SWH archive%s"
+             (if why (format ", but swhd did not (%s)" why) ""))))
+
 ;;; The SWHID of the file at hand
 
 (defun swh--file-name ()
@@ -1920,9 +1957,9 @@ ORIGIN, and cite its latest snapshot instead."
 (transient-define-prefix swh ()
   "Offer the main commands.
 `swh-save', `swh-status', `swh-scan', `swh-provenance', `swh-visits',
-`swh-cite', `swh-swhid-copy', `swh-swhid-copy-archived', `swh-swhid-open'
-and `swh-swhid-copy-link'; \\[universal-argument] typed in the menu before
-one gives it a prefix argument.
+`swh-cite', `swh-refresh', `swh-swhid-copy', `swh-swhid-copy-archived',
+`swh-swhid-open' and `swh-swhid-copy-link'; \\[universal-argument] typed
+in the menu before one gives it a prefix argument.
 The switch, set from `swh-swhid-without-context', says whether the
 SWHID commands take the bare SWHID, without context; a prefix argument
 negates it."
@@ -1932,7 +1969,8 @@ negates it."
     ("S" "Scan: show what is archived" swh-scan)
     ("p" "Provenance: where does the file/dir come from?" swh-provenance)
     ("v" "Visits: list its last visits" swh-visits)
-    ("c" "Cite: show a BibTeX entry" swh-cite)]
+    ("c" "Cite: show a BibTeX entry" swh-cite)
+    ("g" "Refresh: forget what may have changed" swh-refresh)]
    ["SWHID"
     ("-w" "SWHID: without context" "--without-context"
      :init-value (lambda (obj)

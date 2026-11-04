@@ -20,6 +20,7 @@ with a [[https://www.swhid.org][SWHID]], see where the files are already archive
 - =swh-provenance= :: tell where the archive found the file's content,
   or the file or directory at point in Dired
 - =swh-mode= :: show in mode line if the file/directory is archived
+- =swh-refresh= :: forget what may have changed in the SWH archive
 
 With =C-u=, or where there is no public origin, =swh-status=, =swh-visits=,
 =swh-save= and =swh-cite= ask for the URL of a public repository instead.
