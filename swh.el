@@ -1052,6 +1052,8 @@ The node is (PATH SWHID DIR-P ARCHIVED)."
 (defun swh--head-tree (dir root)
   "Hash of the tree of DIR in HEAD, nil when its tracked files differ.
 In the working tree or the index at ROOT; a changed date alone does not."
+  ;; in a copy: refreshing the dates writes the index, even through
+  ;; `git diff', and `swh-mode' must not lock it under the user's feet
   (swh--with-index-copy
    root (lambda ()
           (swh--git-run root '("update-index" "-q" "--refresh"))
