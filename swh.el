@@ -6,7 +6,7 @@
 ;; Maintainer: Bastien Guerry <bzg@gnu.org>
 ;; Keywords: vc, tools
 ;; URL: https://github.com/bzg/swh.el
-;; Version: 0.3.1
+;; Version: 0.3.2
 ;; Package-Requires: ((emacs "30.1"))
 
 ;; This file is not part of GNU Emacs.
@@ -313,9 +313,9 @@ See `swh--retrieve-async'."
          (string-match "\\`[0-9]+\\(?:\\.[0-9]+\\)*" version)
          (not (version< (match-string 0 version) swh-daemon-min-version)))))
 
-(defun swh--daemon-ping ()
-  "The daemon's answer to /ping, nil when it is gone or too old (warned once)."
-  (pcase (swh--retrieve "GET" (concat (swh--base-url swh-daemon-url) "/ping") nil nil 2)
+(defun swh--daemon-pong-of (resp)
+  "The daemon's /ping in RESP, nil when it is gone or too old (warned once)."
+  (pcase resp
     (`(200 ,pong ,_)
      (if (swh--daemon-version-ok-p pong)
          pong
@@ -327,9 +327,31 @@ See `swh--retrieve-async'."
                        swh-daemon-min-version)))
        nil))))
 
+(defvar swh--daemon-pinging nil
+  "The callbacks waiting for the ping under way, see `swh--daemon-pong-async'.")
+
+(defun swh--daemon-pong-async (callback)
+  "CALLBACK gets the daemon's answer to /ping, remembered for half a minute.
+nil when it is gone or too old.  The pings asked for while one is under
+way share its answer."
+  (cond ((swh--fresh-p (car swh--daemon-checked) 30)
+         (funcall callback (cdr swh--daemon-checked)))
+        (swh--daemon-pinging (push callback swh--daemon-pinging))
+        (t
+         (setq swh--daemon-pinging (list callback))
+         (swh--retrieve-async
+          "GET" (concat (swh--base-url swh-daemon-url) "/ping") nil nil
+          (lambda (resp)
+            (let ((pong (swh--daemon-pong-of resp))
+                  (waiting (reverse swh--daemon-pinging)))
+              (setq swh--daemon-checked (cons (float-time) pong)
+                    swh--daemon-pinging nil)
+              (dolist (fn waiting) (funcall fn pong))))
+          2))))
+
 (defun swh--daemon-pong ()
-  "The daemon's answer to /ping, remembered for half a minute."
-  (swh--remembered 'swh--daemon-checked 30 #'swh--daemon-ping))
+  "The daemon's answer to /ping, waited for; see `swh--daemon-pong-async'."
+  (swh--wait (lambda (callback _) (swh--daemon-pong-async callback))))
 
 (defun swh--daemon-available-p ()
   "Whether to go through the daemon: it answers, see `swh--daemon-pong'."
@@ -929,10 +951,15 @@ As the daemon's /swhid, of the ARCHIVED-VERSION when asked; see
 (defun swh--origin-async (root callback failed)
   "Like `swh--origin' on ROOT: CALLBACK gets it, nil without a remote.
 FAILED is as in `swh--showing-errors'."
-  (cond ((not (swh--remote-url root)) (funcall callback nil))
-        ((swh--daemon-available-p)
-         (swh--daemon "GET" "/origin" :path root :callback callback :failed failed))
-        (t (swh--direct-origin-async root callback failed))))
+  (if (not (swh--remote-url root))
+      (funcall callback nil)
+    (swh--daemon-pong-async
+     (swh--showing-errors
+      (lambda (pong)
+        (if pong
+            (swh--daemon "GET" "/origin" :path root :callback callback :failed failed)
+          (swh--direct-origin-async root callback failed)))
+      failed))))
 
 (defun swh--save-async (root callback)
   "Ask to save the repository at ROOT; CALLBACK gets the save request."
@@ -965,16 +992,17 @@ ARCHIVED-VERSION, version; see `swh--direct-swhid', `swh--unchecked-swhid'."
   "CALLBACK gets ((swhid . S) (archived . B)) for FILE.
 FAILED is as in `swh--showing-errors'.  CORE, FILE's core SWHID when
 already known, spares hashing it."
-  (if (swh--daemon-available-p)
-      (swh--daemon "GET" "/file" :path file :callback callback :failed failed)
-    (swh--try failed
-              (lambda ()
-                (let ((core (or core (swh--content-swhid file (swh--repo-root-of file)))))
-                  (swh--known-async core
-                                    (lambda (archived)
-                                      (funcall callback
-                                               `((swhid . ,core) (archived . ,archived))))
-                                    failed))))))
+  (swh--daemon-pong-async
+   (swh--showing-errors
+    (lambda (pong)
+      (if pong
+          (swh--daemon "GET" "/file" :path file :callback callback :failed failed)
+        (let ((core (or core (swh--content-swhid file (swh--repo-root-of file)))))
+          (swh--known-async core
+                            (lambda (archived)
+                              (funcall callback `((swhid . ,core) (archived . ,archived))))
+                            failed))))
+    failed)))
 
 ;;; Whole-repository scans
 
