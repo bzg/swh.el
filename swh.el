@@ -929,10 +929,10 @@ As the daemon's /swhid, of the ARCHIVED-VERSION when asked; see
 (defun swh--origin-async (root callback failed)
   "Like `swh--origin' on ROOT: CALLBACK gets it, nil without a remote.
 FAILED is as in `swh--showing-errors'."
-  (cond ((not (swh--remote-url root)) (funcall callback nil))
-        ((swh--daemon-available-p)
-         (swh--daemon "GET" "/origin" :path root :callback callback :failed failed))
-        (t (swh--direct-origin-async root callback failed))))
+  ;; without a remote, the direct backend tells nil
+  (if (and (swh--daemon-available-p) (swh--remote-url root))
+      (swh--daemon "GET" "/origin" :path root :callback callback :failed failed)
+    (swh--direct-origin-async root callback failed)))
 
 (defun swh--save-async (root callback)
   "Ask to save the repository at ROOT; CALLBACK gets the save request."
@@ -1121,9 +1121,7 @@ FAILED is as in `swh--showing-errors'."
 (defun swh--provenance-token ()
   "Our token, else `daemon' when the daemon has one, else nil."
   (or (swh--token)
-      (and (swh--daemon-available-p)
-           (eq t (alist-get 'authenticated (swh--daemon-pong)))
-           'daemon)))
+      (and (eq t (alist-get 'authenticated (swh--daemon-pong))) 'daemon)))
 
 (defun swh--provenance-available-p ()
   "Whether the provenance API may answer: a token it has not refused."
@@ -1819,15 +1817,15 @@ ask SWH to save %s now? " origin)))
 (defun swh--archive-citation (target &optional origin-p)
   "The archive's BibTeX entry citing the SWHID, or with ORIGIN-P origin, TARGET.
 `no-metadata' when it has no citation metadata, `failed' on other errors."
-  (pcase-let ((`(,status ,body ,_)
-               (swh--api "GET" (concat "/raw-intrinsic-metadata/citation/"
-                                       (if origin-p "origin" "swhid") "/?"
-                                       (url-build-query-string
-                                        `(("citation_format" "bibtex")
-                                          (,(if origin-p "origin_url" "target_swhid")
-                                           ,target)))))))
-    (cond ((and (<= 200 status 299) (listp body) (alist-get 'content body)))
-          ((memq status '(400 404)) 'no-metadata)
+  (let ((resp (swh--api "GET" (concat "/raw-intrinsic-metadata/citation/"
+                                      (if origin-p "origin" "swhid") "/?"
+                                      (url-build-query-string
+                                       `(("citation_format" "bibtex")
+                                         (,(if origin-p "origin_url" "target_swhid")
+                                          ,target)))))))
+    (cond ((and (swh--2xx-p resp) (listp (swh--resp-body resp))
+                (alist-get 'content (swh--resp-body resp))))
+          ((memq (swh--resp-status resp) '(400 404)) 'no-metadata)
           (t 'failed))))
 
 (defun swh--origin-name (origin)
