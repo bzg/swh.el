@@ -6,7 +6,7 @@
 ;; Maintainer: Bastien Guerry <bzg@gnu.org>
 ;; Keywords: vc, tools
 ;; URL: https://github.com/bzg/swh.el
-;; Version: 0.3.0
+;; Version: 0.3.1
 ;; Package-Requires: ((emacs "30.1"))
 
 ;; This file is not part of GNU Emacs.
@@ -988,7 +988,7 @@ already known, spares hashing it."
       (nreverse acc))))
 
 (defun swh--node (path swhid dir-p &optional archived)
-  "A file or directory of the tracked working tree, see `swh--direct-tree'.
+  "A file or directory of the tracked working tree, see `swh--direct-tree-async'.
 The node is (PATH SWHID DIR-P ARCHIVED)."
   (list path swhid dir-p archived))
 
@@ -1058,9 +1058,10 @@ In the working tree or the index at ROOT; a changed date alone does not."
                                               "HEAD" "--" "."))))
                (swh--git dir "rev-parse" "--verify" "-q" "HEAD:./")))))
 
-(defun swh--direct-tree (root)
-  "The `swh--node's of the tracked working tree at ROOT, \".\" first.
-As the daemon's /tree; the check is Merkle-pruned."
+(defun swh--direct-tree-async (root callback failed)
+  "CALLBACK gets the `swh--node's of the tracked working tree at ROOT, \".\" first.
+As the daemon's /tree; the check is Merkle-pruned.  FAILED is as in
+`swh--showing-errors'."
   (let* ((tree (swh--worktree-tree root))
          (nodes (swh--tree-nodes tree (swh--git root "ls-tree" "-r" "-t" "-z" tree)))
          (swhids (make-hash-table :test #'equal))
@@ -1069,27 +1070,35 @@ As the daemon's /tree; the check is Merkle-pruned."
                     (and (not (equal "rev" (swh--type (swh--node-swhid n))))
                          (seq-some (lambda (dir) (swh--known-p (gethash dir swhids)))
                                    (swh--ancestors (swh--node-path n))))))
-         (ask (lambda (dir-p)
-                (swh--known
-                 (seq-keep (lambda (n)
-                             (and (eq (swh--node-dir-p n) dir-p)
-                                  (not (funcall covered n))
-                                  (swh--node-swhid n)))
-                           nodes)))))
+         (unknown (lambda (dir-p)
+                    (seq-keep (lambda (n)
+                                (and (eq (swh--node-dir-p n) dir-p)
+                                     (not (funcall covered n))
+                                     (swh--node-swhid n)))
+                              nodes))))
     (dolist (n nodes) (puthash (swh--node-path n) (swh--node-swhid n) swhids))
     ;; directories first: an archived one covers everything under it
-    (funcall ask t)
-    (funcall ask nil)
-    (mapcar (lambda (n)
-              (swh--node (swh--node-path n) (swh--node-swhid n) (swh--node-dir-p n)
-                         (or (swh--known-p (swh--node-swhid n)) (funcall covered n))))
-            nodes)))
+    (swh--remember-known
+     (funcall unknown t)
+     (lambda (_)
+       (swh--remember-known
+        (funcall unknown nil)
+        (lambda (_)
+          (funcall callback
+                   (mapcar (lambda (n)
+                             (swh--node (swh--node-path n) (swh--node-swhid n)
+                                        (swh--node-dir-p n)
+                                        (or (swh--known-p (swh--node-swhid n))
+                                            (funcall covered n))))
+                           nodes)))
+        failed))
+     failed)))
 
 (defconst swh--tree-timeout 600
   "Seconds to wait for swhd's /tree: a large repository takes many calls.")
 
 (defun swh--tree-async (root callback failed)
-  "CALLBACK gets `swh--direct-tree' of ROOT, through the daemon when it runs.
+  "CALLBACK gets the `swh--node's of ROOT, through the daemon when it runs.
 FAILED is as in `swh--showing-errors'."
   (if (swh--daemon-available-p)
       (swh--daemon
@@ -1104,7 +1113,7 @@ FAILED is as in `swh--showing-errors'."
                               (swh--node (symbol-name (car entry))
                                          .swhid .dir? .archived)))
                           answer))))
-    (swh--try failed (lambda () (funcall callback (swh--direct-tree root))))))
+    (swh--try failed (lambda () (swh--direct-tree-async root callback failed)))))
 
 (defvar swh--provenance-refused nil
   "The token the archive refused the provenance API to, `daemon' for its own.")
@@ -1788,9 +1797,6 @@ archived, a SWHID the archive already resolves.  With BARE, without
 context, see `swh-swhid-without-context'."
   (interactive (list (swh--without-context-p)))
   (swh--swhid-copy 'archived bare))
-
-;;;###autoload
-(define-obsolete-function-alias 'swh-swhid #'swh-swhid-copy "0.3.0")
 
 (defun swh--swhid-unarchived (what path origin)
   "Say why the archive does not hold PATH, WHAT of which was just copied.
