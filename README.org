@@ -28,6 +28,10 @@ By default, =swh-swhid-without-context= is nil so =SWHID= commands provide
 their context. You can negate this option with C-u on those commands
 or toggling the =-w= switch in the transient menu after =M-x swh RET=.
 
+* Example
+
+#+html: <img src="screenshot.webp" />
+
 * Install
 
 swh.el requires Emacs >=30.1 and =git=. You can install it with
