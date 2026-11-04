@@ -739,6 +739,8 @@ INFO is ROOT's origin; nil when not archived, or without a remote upstream."
                (when (member (alist-get 'origin (cdr entry)) candidates)
                  (remhash remote swh--origin-memo)))
              swh--origin-memo))
+  ;; a SWHID tells not which origin holds it: forget every "not
+  ;; archived", what the archive holds stays so
   (maphash (lambda (swhid answer) (unless (cdr answer) (remhash swhid swh--known-memo)))
            swh--known-memo))
 
