@@ -1969,18 +1969,17 @@ negates it."
     ("S" "Scan: show what is archived" swh-scan)
     ("p" "Provenance: where does the file/dir come from?" swh-provenance)
     ("v" "Visits: list its last visits" swh-visits)
-    ("c" "Cite: show a BibTeX entry" swh-cite)
     ("g" "Refresh: forget what may have changed" swh-refresh)]
    ["SWHID"
     ("-w" "SWHID: without context" "--without-context"
      :init-value (lambda (obj)
                    (oset obj value (and swh-swhid-without-context
                                         "--without-context"))))
-    ""
     ("i" "SWHID: copy" swh-swhid-copy)
     ("I" "SWHID: copy the archived version" swh-swhid-copy-archived)
     ("o" "SWHID: open in the archive" swh-swhid-open)
-    ("l" "SWHID: copy the archive link" swh-swhid-copy-link)]])
+    ("l" "SWHID: copy the archive link" swh-swhid-copy-link)
+    ("c" "Cite: show a BibTeX entry" swh-cite)]])
 
 ;;; Org links
 
