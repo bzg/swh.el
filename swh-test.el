@@ -1087,7 +1087,7 @@ swh:1:dir:dd, and counts its CALLS."
                 (setq buffer-file-name path)
                 (set-buffer-modified-p nil)
                 (swh-swhid-copy)
-                (should (string-suffix-p (format "(not archived: %s)" why) said))
+                (should (string-suffix-p (format "(version not archived: %s)" why) said))
                 ;; saving would not archive it: not offered
                 (should-not asked)))
             ;; the commit holding a.txt is pushed, a later one is not:
@@ -1104,7 +1104,7 @@ swh:1:dir:dd, and counts its CALLS."
             (setq buffer-file-name (expand-file-name "sub/b.txt" dir))
             (set-buffer-modified-p nil)
             (swh-swhid-copy)
-            (should (string-suffix-p "(not archived: the commit holding it is not pushed)" said))
+            (should (string-match-p "(version not archived: the commit holding it is not pushed" said))
             (should-not asked)))))))
 
 (ert-deftest swh-test-swhid-forms ()
@@ -1287,7 +1287,7 @@ swh:1:dir:dd, and counts its CALLS."
                 ((symbol-function 'y-or-n-p) #'ignore))
         (pcase-dolist (`(,archived ,status ,why)
                        ;; not archived: the archive is not asked
-                       '((nil nil "not archived: the commit holding it is not pushed")
+                       '((nil nil "version not archived: the commit holding it is not pushed")
                          (t 404 "no citation metadata in the archive")
                          (t 400 "no citation metadata in the archive")
                          (t 500 "the archive failed to make one")))

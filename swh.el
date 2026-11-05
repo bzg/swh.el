@@ -1841,7 +1841,7 @@ context, see `swh-swhid-without-context'."
   "Say why the archive does not hold PATH, WHAT of which was just copied.
 Or offer to save ORIGIN, when public."
   (if-let* ((why (swh--unarchived-why path)))
-      (message "Copied %s (not archived: %s)" what why)
+      (message "Copied %s (version not archived: %s)" what why)
     (if (and origin
              (swh--public-origin-p origin)
              (y-or-n-p (format "Not archived since the last push (copied); \
@@ -1851,7 +1851,7 @@ ask SWH to save %s now? " origin)))
         (swh-save (unless (equal (swh--normalize-origin origin)
                                           (swh--local-origin))
                              origin))
-      (message "Copied %s (not archived yet)" what))))
+      (message "Copied %s (version not archived yet)" what))))
 
 ;;; Citations
 
