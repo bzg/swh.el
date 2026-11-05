@@ -1969,7 +1969,7 @@ negates it."
     ("S" "Scan: show what is archived" swh-scan)
     ("p" "Provenance: where does the file/dir come from?" swh-provenance)
     ("v" "Visits: list its last visits" swh-visits)
-    ("g" "Refresh: forget what may have changed" swh-refresh)]
+    ("g" "Refresh: forget what may have changed" swh-refresh :transient t)]
    ["SWHID"
     ("-w" "SWHID: without context" "--without-context"
      :init-value (lambda (obj)
