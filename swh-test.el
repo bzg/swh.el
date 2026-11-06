@@ -16,6 +16,7 @@
 ;;; Code:
 
 (require 'ert)
+(require 'dired)
 (require 'cl-lib)
 (require 'swh)
 
